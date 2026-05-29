@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sector Sweep FPS</title>
+  <style>
+    :root {
+      --panel: rgba(6, 12, 18, 0.78);
+      --accent: #ffbe3d;
+      --danger: #ff4b4b;
+      --cool: #54d7ff;
+      --text: #f5f7fb;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 25%, rgba(255, 190, 61, 0.14), transparent 32%),
+        linear-gradient(135deg, #08111b 0%, #121d24 45%, #05080d 100%);
+      color: var(--text);
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: crosshair;
+    }
+
+    .hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+    }
+
+    .stats {
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      min-width: 96px;
+      padding: 10px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
+      background: var(--panel);
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.32);
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .health.low {
+      color: var(--danger);
+      animation: pulse 0.7s infinite alternate;
+    }
+
+    .ammo {
+      color: var(--accent);
+    }
+
+    .wave {
+      color: var(--cool);
+    }
+
+    .crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 26px;
+      height: 26px;
+      transform: translate(-50%, -50%);
+    }
+
+    .crosshair::before,
+    .crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 0 8px rgba(84, 215, 255, 0.65);
+    }
+
+    .crosshair::before {
+      top: 12px;
+      left: 0;
+      width: 26px;
+      height: 2px;
+    }
+
+    .crosshair::after {
+      top: 0;
+      left: 12px;
+      width: 2px;
+      height: 26px;
+    }
+
+    .message {
+      position: absolute;
+      left: 50%;
+      bottom: 28px;
+      width: min(720px, calc(100vw - 32px));
+      transform: translateX(-50%);
+      padding: 14px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 18px;
+      background: var(--panel);
+      color: rgba(245, 247, 251, 0.9);
+      text-align: center;
+      font-weight: 700;
+      line-height: 1.4;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 50% 28%, rgba(84, 215, 255, 0.18), transparent 30%),
+        rgba(2, 6, 10, 0.82);
+      color: var(--text);
+    }
+
+    .card {
+      width: min(560px, 100%);
+      padding: 34px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 28px;
+      background: rgba(8, 14, 22, 0.86);
+      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2.4rem, 8vw, 5rem);
+      line-height: 0.92;
+      letter-spacing: -0.08em;
+      text-transform: uppercase;
+    }
+
+    p {
+      margin: 0 0 18px;
+      color: rgba(245, 247, 251, 0.78);
+      line-height: 1.55;
+    }
+
+    button {
+      padding: 14px 24px;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent), #ff713d);
+      color: #101010;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      box-shadow: 0 12px 32px rgba(255, 126, 61, 0.28);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 20px 0 24px;
+      text-align: left;
+    }
+
+    .controls span {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.07);
+      color: rgba(245, 247, 251, 0.82);
+      font-size: 0.95rem;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @keyframes pulse {
+      from { opacity: 0.65; }
+      to { opacity: 1; }
+    }
+
+    @media (max-width: 640px) {
+      .stats {
+        top: 10px;
+        left: 10px;
+        gap: 8px;
+      }
+
+      .pill {
+        min-width: auto;
+        padding: 8px 10px;
+        font-size: 0.78rem;
+      }
+
+      .controls {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="First person shooter game"></canvas>
+
+  <div class="hud">
+    <div class="stats">
+      <div class="pill health" id="health">Health 100</div>
+      <div class="pill ammo" id="ammo">Ammo 12 / 36</div>
+      <div class="pill wave" id="wave">Wave 1</div>
+      <div class="pill" id="score">Score 0</div>
+    </div>
+    <div class="crosshair"></div>
+    <div class="message" id="message">Click Start Mission, then click the arena to lock pointer.</div>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="card">
+      <h1>Sector Sweep</h1>
+      <p>Clear hostile drones from a neon training arena. Strafe, aim, and keep your distance.</p>
+      <div class="controls">
+        <span>WASD: Move</span>
+        <span>Mouse / Arrows: Look</span>
+        <span>Click / Space: Fire</span>
+        <span>R: Reload</span>
+        <span>Shift: Sprint</span>
+        <span>Esc: Release Mouse</span>
+      </div>
+      <button id="start">Start Mission</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const healthEl = document.getElementById("health");
+    const ammoEl = document.getElementById("ammo");
+    const waveEl = document.getElementById("wave");
+    const scoreEl = document.getElementById("score");
+    const messageEl = document.getElementById("message");
+    const overlay = document.getElementById("overlay");
+    const startButton = document.getElementById("start");
+
+    window.addEventListener("error", event => {
+      messageEl.textContent = `Error: ${event.message}`;
+    });
+
+    const world = {
+      width: 34,
+      height: 34,
+      grid: [
+        "##################################",
+        "#............#.............#.....#",
+        "#............#.............#.....#",
+        "#..####......#....#####....#.....#",
+        "#.....#............#.............#",
+        "#.....#............#.............#",
+        "#.....#####........#.....#####...#",
+        "#..................#.........#...#",
+        "#..................#.........#...#",
+        "#....######........#####.....#...#",
+        "#.........#..................#...#",
+        "#.........#..................#...#",
+        "#.........#....#####.........#...#",
+        "#..............#.................#",
+        "#..............#.................#",
+        "#####..........#.....#####.......#",
+        "#..............#.........#.......#",
+        "#..............#.........#.......#",
+        "#....#####.....#.........#..######",
+        "#....#...................#.......#",
+        "#....#...................#.......#",
+        "#....#......#####........#.......#",
+        "#...............#................#",
+        "#...............#................#",
+        "#..######.......#.....######.....#",
+        "#.......#..................#.....#",
+        "#.......#..................#.....#",
+        "#.......#####..............#.....#",
+        "#..................#####.........#",
+        "#......................#.........#",
+        "#.....#####............#....###..#",
+        "#.........#.................#....#",
+        "#...........................#....#",
+        "##################################"
+      ]
+    };
+
+    const state = {
+      running: false,
+      gameOver: false,
+      player: { x: 3.5, y: 3.5, angle: 0.4, health: 100 },
+      keys: new Set(),
+      bullets: 12,
+      reserve: 36,
+      maxBullets: 12,
+      score: 0,
+      wave: 1,
+      enemies: [],
+      hitFlash: 0,
+      muzzleFlash: 0,
+      lastShot: 0,
+      lastTime: 0
+    };
+
+    function resize() {
+      const scale = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(window.innerWidth * scale);
+      canvas.height = Math.floor(window.innerHeight * scale);
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    }
+
+    function isWall(x, y) {
+      const gx = Math.floor(x);
+      const gy = Math.floor(y);
+      return gy < 0 || gy >= world.height || gx < 0 || gx >= world.width || world.grid[gy][gx] === "#";
+    }
+
+    function moveEntity(entity, dx, dy) {
+      const radius = 0.18;
+      if (!isWall(entity.x + dx + Math.sign(dx) * radius, entity.y)) {
+        entity.x += dx;
+      }
+      if (!isWall(entity.x, entity.y + dy + Math.sign(dy) * radius)) {
+        entity.y += dy;
+      }
+    }
+
+    function spawnWave() {
+      state.enemies = [];
+      const count = 4 + state.wave * 2;
+      const spawnPoints = [
+        { x: 28.5, y: 4.5 },
+        { x: 26.5, y: 17.5 },
+        { x: 6.5, y: 29.5 },
+        { x: 19.5, y: 24.5 },
+        { x: 12.5, y: 11.5 }
+      ];
+
+      for (let i = 0; i < count; i++) {
+        const point = spawnPoints[i % spawnPoints.length];
+        state.enemies.push({
+          x: point.x + (Math.random() - 0.5) * 1.4,
+          y: point.y + (Math.random() - 0.5) * 1.4,
+          health: 2 + Math.floor(state.wave / 2),
+          speed: 0.9 + state.wave * 0.08,
+          damageCooldown: 0
+        });
+      }
+      setMessage(`Wave ${state.wave}: ${count} drones incoming.`);
+    }
+
+    function setMessage(text) {
+      messageEl.textContent = text;
+    }
+
+    function updateHud() {
+      healthEl.textContent = `Health ${Math.max(0, Math.ceil(state.player.health))}`;
+      healthEl.classList.toggle("low", state.player.health <= 30);
+      ammoEl.textContent = `Ammo ${state.bullets} / ${state.reserve}`;
+      waveEl.textContent = `Wave ${state.wave}`;
+      scoreEl.textContent = `Score ${state.score}`;
+    }
+
+    function startGame() {
+      Object.assign(state, {
+        running: true,
+        gameOver: false,
+        bullets: 12,
+        reserve: 36,
+        score: 0,
+        wave: 1,
+        hitFlash: 0,
+        muzzleFlash: 0,
+        lastShot: 0
+      });
+      state.player = { x: 3.5, y: 3.5, angle: 0.4, health: 100 };
+      overlay.querySelector("h1").textContent = "Sector Sweep";
+      overlay.querySelector("p").textContent = "Clear hostile drones from a neon training arena. Strafe, aim, and keep your distance.";
+      startButton.textContent = "Start Mission";
+      overlay.classList.add("hidden");
+      spawnWave();
+      updateHud();
+      if (canvas.requestPointerLock) {
+        canvas.requestPointerLock();
+      }
+    }
+
+    function reload() {
+      if (state.bullets === state.maxBullets || state.reserve <= 0) return;
+      const needed = state.maxBullets - state.bullets;
+      const loaded = Math.min(needed, state.reserve);
+      state.bullets += loaded;
+      state.reserve -= loaded;
+      setMessage("Reloaded.");
+      updateHud();
+    }
+
+    function fire() {
+      const now = performance.now();
+      if (!state.running || state.gameOver || now - state.lastShot < 160) return;
+      state.lastShot = now;
+      state.muzzleFlash = 1;
+
+      if (state.bullets <= 0) {
+        setMessage("Empty. Press R to reload.");
+        return;
+      }
+
+      state.bullets--;
+      const hit = findShotHit();
+      if (hit) {
+        hit.enemy.health--;
+        state.hitFlash = 1;
+        if (hit.enemy.health <= 0) {
+          state.score += 100;
+          state.reserve += 3;
+          state.enemies.splice(state.enemies.indexOf(hit.enemy), 1);
+          setMessage("Drone neutralized. +3 reserve ammo.");
+        } else {
+          state.score += 25;
+          setMessage("Hit confirmed.");
+        }
+      }
+
+      if (state.enemies.length === 0) {
+        state.wave++;
+        state.reserve += 12;
+        spawnWave();
+      }
+      updateHud();
+    }
+
+    function findShotHit() {
+      let nearest = null;
+      const aim = state.player.angle;
+      for (const enemy of state.enemies) {
+        const dx = enemy.x - state.player.x;
+        const dy = enemy.y - state.player.y;
+        const distance = Math.hypot(dx, dy);
+        const angleToEnemy = Math.atan2(dy, dx);
+        const delta = Math.abs(normalizeAngle(angleToEnemy - aim));
+        if (delta < 0.055 && hasLineOfSight(state.player.x, state.player.y, enemy.x, enemy.y)) {
+          if (!nearest || distance < nearest.distance) {
+            nearest = { enemy, distance };
+          }
+        }
+      }
+      return nearest;
+    }
+
+    function hasLineOfSight(x1, y1, x2, y2) {
+      const steps = Math.ceil(Math.hypot(x2 - x1, y2 - y1) * 12);
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        if (isWall(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)) return false;
+      }
+      return true;
+    }
+
+    function normalizeAngle(angle) {
+      while (angle > Math.PI) angle -= Math.PI * 2;
+      while (angle < -Math.PI) angle += Math.PI * 2;
+      return angle;
+    }
+
+    function update(dt) {
+      if (!state.running || state.gameOver) return;
+
+      const player = state.player;
+      const baseSpeed = state.keys.has("ShiftLeft") || state.keys.has("ShiftRight") ? 4.2 : 2.6;
+      if (state.keys.has("ArrowLeft")) player.angle -= 2.4 * dt;
+      if (state.keys.has("ArrowRight")) player.angle += 2.4 * dt;
+
+      let forward = 0;
+      let strafe = 0;
+      if (state.keys.has("KeyW")) forward += 1;
+      if (state.keys.has("KeyS")) forward -= 1;
+      if (state.keys.has("KeyD")) strafe += 1;
+      if (state.keys.has("KeyA")) strafe -= 1;
+
+      const length = Math.hypot(forward, strafe) || 1;
+      forward /= length;
+      strafe /= length;
+
+      const dx = (Math.cos(player.angle) * forward + Math.cos(player.angle + Math.PI / 2) * strafe) * baseSpeed * dt;
+      const dy = (Math.sin(player.angle) * forward + Math.sin(player.angle + Math.PI / 2) * strafe) * baseSpeed * dt;
+      moveEntity(player, dx, dy);
+
+      for (const enemy of state.enemies) {
+        enemy.damageCooldown = Math.max(0, enemy.damageCooldown - dt);
+        const dxToPlayer = player.x - enemy.x;
+        const dyToPlayer = player.y - enemy.y;
+        const distance = Math.hypot(dxToPlayer, dyToPlayer);
+        if (distance > 0.45 && hasLineOfSight(enemy.x, enemy.y, player.x, player.y)) {
+          moveEntity(enemy, (dxToPlayer / distance) * enemy.speed * dt, (dyToPlayer / distance) * enemy.speed * dt);
+        }
+        if (distance < 0.72 && enemy.damageCooldown <= 0) {
+          player.health -= 9 + state.wave;
+          enemy.damageCooldown = 0.8;
+          setMessage("Drone strike. Keep moving.");
+          if (player.health <= 0) {
+            endGame();
+          }
+        }
+      }
+
+      state.hitFlash = Math.max(0, state.hitFlash - dt * 5);
+      state.muzzleFlash = Math.max(0, state.muzzleFlash - dt * 8);
+      updateHud();
+    }
+
+    function endGame() {
+      state.gameOver = true;
+      state.running = false;
+      if (document.exitPointerLock) {
+        document.exitPointerLock();
+      }
+      overlay.classList.remove("hidden");
+      overlay.querySelector("h1").textContent = "Mission Failed";
+      overlay.querySelector("p").textContent = `Final score: ${state.score}. Restart and clear the sector.`;
+      startButton.textContent = "Restart Mission";
+    }
+
+    function render() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const fov = Math.PI / 3;
+      const rays = Math.floor(width / 2);
+      const player = state.player;
+
+      const sky = ctx.createLinearGradient(0, 0, 0, height / 2);
+      sky.addColorStop(0, "#07111d");
+      sky.addColorStop(1, "#173046");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, width, height / 2);
+
+      const floor = ctx.createLinearGradient(0, height / 2, 0, height);
+      floor.addColorStop(0, "#18242b");
+      floor.addColorStop(1, "#06090d");
+      ctx.fillStyle = floor;
+      ctx.fillRect(0, height / 2, width, height / 2);
+
+      drawFloorGrid(width, height, player);
+      const depthBuffer = [];
+
+      for (let i = 0; i < rays; i++) {
+        const rayAngle = player.angle - fov / 2 + (i / rays) * fov;
+        const hit = castRay(player.x, player.y, rayAngle);
+        const corrected = hit.distance * Math.cos(rayAngle - player.angle);
+        const wallHeight = Math.min(height, height / (corrected + 0.0001));
+        const shade = Math.max(30, 220 - corrected * 28);
+        const x = (i / rays) * width;
+        const colWidth = width / rays + 1;
+        depthBuffer[i] = corrected;
+
+        ctx.fillStyle = hit.vertical
+          ? `rgb(${shade * 0.42}, ${shade * 0.54}, ${shade * 0.66})`
+          : `rgb(${shade * 0.28}, ${shade * 0.42}, ${shade * 0.52})`;
+        ctx.fillRect(x, height / 2 - wallHeight / 2, colWidth, wallHeight);
+
+        if (hit.edge < 0.06 || hit.edge > 0.94) {
+          ctx.fillStyle = "rgba(255, 190, 61, 0.16)";
+          ctx.fillRect(x, height / 2 - wallHeight / 2, 1, wallHeight);
+        }
+      }
+
+      drawEnemies(width, height, fov, depthBuffer);
+      drawWeapon(width, height);
+      drawMiniMap();
+
+      if (state.hitFlash > 0) {
+        ctx.fillStyle = `rgba(84, 215, 255, ${state.hitFlash * 0.2})`;
+        ctx.fillRect(0, 0, width, height);
+      }
+    }
+
+    function castRay(x, y, angle) {
+      const step = 0.025;
+      let distance = 0;
+      let hitX = x;
+      let hitY = y;
+      while (distance < 24) {
+        hitX = x + Math.cos(angle) * distance;
+        hitY = y + Math.sin(angle) * distance;
+        if (isWall(hitX, hitY)) {
+          const fracX = hitX - Math.floor(hitX);
+          const fracY = hitY - Math.floor(hitY);
+          const vertical = fracX < 0.06 || fracX > 0.94;
+          return { distance, vertical, edge: vertical ? fracY : fracX };
+        }
+        distance += step;
+      }
+      return { distance: 24, vertical: false, edge: 0.5 };
+    }
+
+    function drawFloorGrid(width, height, player) {
+      ctx.strokeStyle = "rgba(84, 215, 255, 0.08)";
+      ctx.lineWidth = 1;
+      for (let i = -12; i <= 12; i++) {
+        const offset = i * 46 - ((player.x + player.y) * 18 % 46);
+        ctx.beginPath();
+        ctx.moveTo(0, height / 2 + offset);
+        ctx.lineTo(width, height / 2 + offset * 1.5);
+        ctx.stroke();
+      }
+    }
+
+    function drawEnemies(width, height, fov, depthBuffer) {
+      const visible = state.enemies
+        .map(enemy => {
+          const dx = enemy.x - state.player.x;
+          const dy = enemy.y - state.player.y;
+          return {
+            enemy,
+            distance: Math.hypot(dx, dy),
+            angle: normalizeAngle(Math.atan2(dy, dx) - state.player.angle)
+          };
+        })
+        .filter(item => Math.abs(item.angle) < fov / 1.7 && hasLineOfSight(state.player.x, state.player.y, item.enemy.x, item.enemy.y))
+        .sort((a, b) => b.distance - a.distance);
+
+      for (const item of visible) {
+        const screenX = width / 2 + Math.tan(item.angle) * width;
+        const size = Math.min(height * 0.85, height / item.distance);
+        const bufferIndex = Math.max(0, Math.min(depthBuffer.length - 1, Math.floor((screenX / width) * depthBuffer.length)));
+        if (depthBuffer[bufferIndex] && depthBuffer[bufferIndex] < item.distance - 0.25) continue;
+
+        const top = height / 2 - size * 0.55;
+        const gradient = ctx.createRadialGradient(screenX, top + size * 0.42, size * 0.08, screenX, top + size * 0.42, size * 0.48);
+        gradient.addColorStop(0, "#ffef9d");
+        gradient.addColorStop(0.45, "#ff713d");
+        gradient.addColorStop(1, "#6a1623");
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.ellipse(screenX, top + size * 0.44, size * 0.32, size * 0.44, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
+        ctx.lineWidth = Math.max(2, size * 0.025);
+        ctx.beginPath();
+        ctx.moveTo(screenX - size * 0.52, top + size * 0.25);
+        ctx.lineTo(screenX + size * 0.52, top + size * 0.25);
+        ctx.moveTo(screenX - size * 0.5, top + size * 0.64);
+        ctx.lineTo(screenX + size * 0.5, top + size * 0.64);
+        ctx.stroke();
+      }
+    }
+
+    function drawWeapon(width, height) {
+      const bob = Math.sin(performance.now() / 120) * 4;
+      ctx.save();
+      ctx.translate(width / 2, height - 34 + bob);
+
+      ctx.fillStyle = "#14191f";
+      roundedRect(ctx, -92, -88, 184, 110, 18);
+      ctx.fill();
+
+      ctx.fillStyle = "#283642";
+      roundedRect(ctx, -58, -122, 116, 112, 12);
+      ctx.fill();
+
+      ctx.fillStyle = "#0c1116";
+      roundedRect(ctx, -34, -156, 68, 64, 10);
+      ctx.fill();
+
+      ctx.fillStyle = "#ffbe3d";
+      ctx.fillRect(-22, -134, 44, 8);
+
+      if (state.muzzleFlash > 0) {
+        ctx.fillStyle = `rgba(255, 190, 61, ${state.muzzleFlash})`;
+        ctx.beginPath();
+        ctx.arc(0, -172, 34 * state.muzzleFlash, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function roundedRect(context, x, y, width, height, radius) {
+      const r = Math.min(radius, width / 2, height / 2);
+      context.beginPath();
+      context.moveTo(x + r, y);
+      context.lineTo(x + width - r, y);
+      context.quadraticCurveTo(x + width, y, x + width, y + r);
+      context.lineTo(x + width, y + height - r);
+      context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+      context.lineTo(x + r, y + height);
+      context.quadraticCurveTo(x, y + height, x, y + height - r);
+      context.lineTo(x, y + r);
+      context.quadraticCurveTo(x, y, x + r, y);
+      context.closePath();
+    }
+
+    function drawMiniMap() {
+      const scale = 4;
+      const pad = 18;
+      const x = window.innerWidth - world.width * scale - pad;
+      const y = pad;
+      ctx.save();
+      ctx.globalAlpha = 0.82;
+      ctx.fillStyle = "rgba(6, 12, 18, 0.72)";
+      ctx.fillRect(x - 8, y - 8, world.width * scale + 16, world.height * scale + 16);
+      for (let gy = 0; gy < world.height; gy++) {
+        for (let gx = 0; gx < world.width; gx++) {
+          ctx.fillStyle = world.grid[gy][gx] === "#" ? "#8ea9ba" : "rgba(255,255,255,0.05)";
+          ctx.fillRect(x + gx * scale, y + gy * scale, scale, scale);
+        }
+      }
+      ctx.fillStyle = "#ffbe3d";
+      ctx.fillRect(x + state.player.x * scale - 2, y + state.player.y * scale - 2, 4, 4);
+      ctx.fillStyle = "#ff4b4b";
+      for (const enemy of state.enemies) {
+        ctx.fillRect(x + enemy.x * scale - 1.5, y + enemy.y * scale - 1.5, 3, 3);
+      }
+      ctx.restore();
+    }
+
+    function frame(time) {
+      const dt = Math.min(0.033, (time - state.lastTime) / 1000 || 0);
+      state.lastTime = time;
+      update(dt);
+      render();
+      requestAnimationFrame(frame);
+    }
+
+    window.addEventListener("resize", resize);
+    window.addEventListener("keydown", event => {
+      state.keys.add(event.code);
+      if (event.code === "KeyR") reload();
+      if (event.code === "Space") fire();
+      if (["ArrowLeft", "ArrowRight", "Space"].includes(event.code)) {
+        event.preventDefault();
+      }
+    });
+    window.addEventListener("keyup", event => state.keys.delete(event.code));
+    window.addEventListener("mousemove", event => {
+      if (document.pointerLockElement === canvas && state.running) {
+        state.player.angle += event.movementX * 0.0024;
+      }
+    });
+    window.addEventListener("mousedown", event => {
+      if (event.button === 0) fire();
+    });
+    canvas.addEventListener("click", () => {
+      if (state.running && canvas.requestPointerLock) {
+        canvas.requestPointerLock();
+      }
+    });
+    startButton.addEventListener("click", startGame);
+
+    resize();
+    updateHud();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
